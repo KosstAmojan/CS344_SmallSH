@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="PublishConfigData" serverName="OS1 (f09a26f5-6796-41ee-a6ab-654b422edb3f)" remoteFilesAllowedToDisappearOnAutoupload="false">
+    <serverData>
+      <paths name="OS1 (f09a26f5-6796-41ee-a6ab-654b422edb3f)">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/tmp/CS344_Assignment3" local="$PROJECT_DIR$" />
+          </mappings>
+          <excludedPaths>
+            <excludedPath local="true" path="/nfs/stk/users/norwooma/CS344_Project3" />
+            <excludedPath local="true" path="/nfs/stak/users/norwooma/CS344_Project3/cmake-build-debug" />
+            <excludedPath local="true" path="/nfs/stak/users/norwooma/CS344_Project3" />
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug" />
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug-os1" />
+            <excludedPath local="true" path="/nfs/stk/usrs/norwooma/CS344_Project3/cmake-build-debug" />
+            <excludedPath local="true" path="$PROJECT_DIR$/~/CS344_Project3/cmake-build-debug" />
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-release" />
+            <excludedPath local="true" path="/nfs/stk/usrs/norwooma/CS344_Project3" />
+            <excludedPath local="true" path="$PROJECT_DIR$/~/CS344_Project3" />
+            <excludedPath local="true" path="/nfs/stk/users/norwooma/CS344_Project3/cmake-build-debug" />
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-release-os1" />
+          </excludedPaths>
+        </serverdata>
+      </paths>
+    </serverData>
+  </component>
+</project>
