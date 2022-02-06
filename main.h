@@ -495,7 +495,7 @@ void shellUserInput(void) {
                 break;
             }
             else {
-                
+
             }
         }
         childPid = waitpid(-1, &childStatus, WNOHANG);
