@@ -18,11 +18,13 @@
 #include <time.h>
 #include <unistd.h>
 #include <signal.h>
+#include <sys/wait.h>
 
 // Macro definitions here //
 #define MAX_LINE 2047
 #define MAX_PATH 4095
 #define ARG_MAX 256
+#define PROC_MAX 200
 
 // Struct definitions here //
 struct command_data {
@@ -37,7 +39,8 @@ struct command_data {
 struct process_status {
     int lastExitStatus;
     int lastTermSig;
-    int processCount;
+    int childCount;
+    pid_t unfinishedProcessArray[PROC_MAX];
 };
 
 ssize_t pidDigitCount(pid_t process_id){
@@ -106,14 +109,15 @@ int changeDirectory(struct command_data *curr_command) {
 }
 
 void killAll(void){
-    // 0 will kill all the processes in the parent's process group. SIGTERM allows the processes to perform clean up.
+    // 0 will kill all the processes in the parent's process group. SIGTERM allows the parent process
+    // to perform clean up.
     kill(0,SIGTERM);
 
 }
 
 void status(struct process_status *last_p_status){
     /// gets the exit status or term signal of the last foreground process run by the shell.
-    if (last_p_status->processCount == 0) {
+    if (last_p_status->childCount == 0) {
         printf("exit value: %d", last_p_status->lastExitStatus);
     }
 
@@ -200,9 +204,6 @@ int processUserInput(struct command_data *curr_command, struct process_status *l
             exit(1);
         } else if (childPid == 0) {
 
-            // increment process count.
-            last_p_status->processCount++;
-
             // print message as child process begins.
             if (curr_command->run_in_background == 1) {
                 printf("Child process %d beginning.\n", passChildPid);
@@ -215,22 +216,30 @@ int processUserInput(struct command_data *curr_command, struct process_status *l
             if (execvp(curr_command->command, curr_command->argumentVector) == -1) {
                 printf("%s not found in path or current working directory.\n", curr_command->command);
             };
-            last_p_status->processCount--;
+            last_p_status->childCount--;
             exit(1);
+            // need to signal once exited that main thread can resume execution.
         }
 
         else {
+            // The parent process executes this branch
+
             // wait for the child process
             if (curr_command->run_in_background == 0) {
                 childPid = waitpid(childPid, &childStatus, 0);
-                printf("PARENT(%d): child(%d) finished.\n",getpid(), childPid);
+                if(WIFEXITED(childStatus)){
+                    printf("Child %d exited normally with status %d\n", childPid, WEXITSTATUS(childStatus));
+                } else{
+                    printf("Child %d exited abnormally due to signal %d\n", childPid, WTERMSIG(childStatus));
+                }
             }
             // don't wait for the child process
             else {
-                // The parent process executes this branch
-                // WNOHANG specified. If the child hasn't terminated, waitpid will immediately return with value 0
-                childPid = waitpid(-1, &childStatus, WNOHANG);
-                printf("Child process %d completed with an exit status of %d\n", childPid, childStatus);
+                // increment process count.
+                last_p_status->childCount++;
+
+                // add process id to the list of unfinished processes.
+                last_p_status->unfinishedProcessArray[last_p_status->childCount] = childPid;
             }
         }
         // non-built in command, need to check path for matching executable.
@@ -297,7 +306,7 @@ void parseCommand(char *usr_input, struct command_data *command_data){
     }
 
     else {
-        delim_index = strlen(command_data->command);
+        delim_index = (long)strlen(command_data->command);
     }
 
     // anything between
@@ -438,13 +447,17 @@ void shellUserInput(void) {
     struct process_status *last_p_status = malloc(sizeof(struct process_status));
     last_p_status->lastExitStatus = 0;
     last_p_status->lastTermSig = 0;
-    last_p_status->processCount = 0;
+    last_p_status->childCount = 0;
+    for (int i = 0; i < 200; i++){
+        last_p_status->unfinishedProcessArray[i] = 0;
+    }
+
 
     // Borrowing signal struct code from lecture materials.
     struct sigaction ignore_action = {0};
     int lastStatus = 0;
 
-    // The ignore_action struct as SIG_IGN as its signal handler
+    // The ignore_action struct has SIG_IGN as its signal handler
     ignore_action.sa_handler = SIG_IGN;
 
     // Register the ignore_action as the handler for SIGTERM this signal will be ignored.
@@ -469,6 +482,26 @@ void shellUserInput(void) {
         size_t max_line1 = MAX_LINE, *max_line = &max_line1, bytes_read = 0, alloc_mem = sizeof(char) * MAX_LINE,
                             pidDigitCnt = 0;
         pid_t shell_process_id = getpid();
+
+        // check the active background processes prior to returning control to main
+
+        // WNOHANG specified. If the child hasn't terminated, waitpid will immediately return with value 0
+
+        for (int k = last_p_status->childCount - 1; k >= 0; k--) {
+            pid_t childPid = 0;
+            int childStatus;
+            childPid = waitpid(last_p_status->unfinishedProcessArray[k],&childStatus,WNOHANG);
+            if (childPid == 0) {
+                break;
+            }
+            else {
+                
+            }
+        }
+        childPid = waitpid(-1, &childStatus, WNOHANG);
+        printf("Child process %d completed with an exit status of %d\n", childPid, childStatus);
+
+        pause();
         printf(":");
 
         if ((bytes_read = getline(usr_input, max_line, stdin)) < 0) {
@@ -481,10 +514,6 @@ void shellUserInput(void) {
         if (bytes_read == 1) {
             continue;
         }
-
-//        if ((*usr_input)[bytes_read - 1] == '\n') {
-//            (*usr_input)[bytes_read - 1] = '\0';
-//        }
 
         strncpy(usr_input_str, usr_input[0], strlen(usr_input[0]) - 1);
 
