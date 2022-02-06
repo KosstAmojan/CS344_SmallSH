@@ -121,6 +121,53 @@ void status(struct process_status *last_p_status){
     printf("\n");
 }
 
+void input_output_redirect(struct command_data *curr_command, char *input_or_output,
+                                                    struct process_status *last_p_status) {
+
+    char *filestream;
+    if (strcmp(input_or_output, "input") == 0) {
+        filestream = curr_command->input_file;
+    }
+    else {
+        filestream = curr_command->output_file;
+    }
+
+    char *filepath;
+    if (filestream == NULL && curr_command->run_in_background == 1) {
+        filepath = "/dev/null";
+    } else {
+        filepath = filestream;
+    }
+
+    if (filepath != NULL) {
+        if (strcmp(input_or_output, "input") == 0) {
+            int sourceFD = open(filepath, O_RDONLY);
+            if (sourceFD == -1) {
+                perror("source open()");
+                last_p_status->lastExitStatus = 1;
+            }
+
+            // Redirect stdin to source file
+            int result = dup2(sourceFD, 0);
+            if (result == -1) {
+                perror("source dup2()");
+            }
+        } else {
+            int targetFD = open(filepath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if (targetFD == -1) {
+                perror("target open()");
+                last_p_status->lastExitStatus = 1;
+            }
+
+            // Redirect stdout to target file
+            int result = dup2(targetFD, 1);
+            if (result == -1) {
+                perror("target dup2");
+            }
+        }
+    }
+}
+
 int processUserInput(struct command_data *curr_command, struct process_status *last_p_status){
 
     int ret_status = 0;
@@ -146,15 +193,45 @@ int processUserInput(struct command_data *curr_command, struct process_status *l
     else {
         int childStatus;
         pid_t childPid = fork();
+        pid_t passChildPid = childPid;
 
         if(childPid == -1){
             perror("fork() failed!");
             exit(1);
-        } else if(childPid == 0) {
-            // this is the branch for the child process
+        } else if (childPid == 0) {
+
+            // increment process count.
+            last_p_status->processCount++;
+
+            // print message as child process begins.
+            if (curr_command->run_in_background == 1) {
+                printf("Child process %d beginning.\n", passChildPid);
+            }
+
+            input_output_redirect(curr_command, "input", last_p_status);
+            input_output_redirect(curr_command, "output", last_p_status);
+
+            printf("The child process is running %s\n", curr_command->command);
+            if (execvp(curr_command->command, curr_command->argumentVector) == -1) {
+                printf("%s not found in path or current working directory.\n", curr_command->command);
+            };
+            last_p_status->processCount--;
             exit(1);
-        } else {
-            // this the branch for the parent process
+        }
+
+        else {
+            // wait for the child process
+            if (curr_command->run_in_background == 0) {
+                childPid = waitpid(childPid, &childStatus, 0);
+                printf("PARENT(%d): child(%d) finished.\n",getpid(), childPid);
+            }
+            // don't wait for the child process
+            else {
+                // The parent process executes this branch
+                // WNOHANG specified. If the child hasn't terminated, waitpid will immediately return with value 0
+                childPid = waitpid(-1, &childStatus, WNOHANG);
+                printf("Child process %d completed with an exit status of %d\n", childPid, childStatus);
+            }
         }
         // non-built in command, need to check path for matching executable.
     }
@@ -224,7 +301,7 @@ void parseCommand(char *usr_input, struct command_data *command_data){
     }
 
     // anything between
-    if(delim_index > strlen(command_data->command) - 1 && token != NULL) {
+    if(delim_index > strlen(command_data->command) - 1) {
 
         // make the trailing space(s) null terminator(s) (if there are trailing space(s)).
         while (token[strlen(token) - str_trail] == ' '){
@@ -320,15 +397,26 @@ void parseCommand(char *usr_input, struct command_data *command_data){
 
 void argumentVector(struct command_data *command_data) {
 
-    char *str_command_copy = calloc(strlen(command_data->argumentList),sizeof(char));
+    if (command_data->argumentList == NULL) {
+        command_data->argumentVector[0] = calloc(strlen(command_data->command) + 1,sizeof(char));
+        strcpy(command_data->argumentVector[0], command_data->command);
+        return;
+    }
+
+    char *str_command_copy = calloc(strlen(command_data->argumentList) + 1,sizeof(char));
     strcpy(str_command_copy, command_data->argumentList);
     char *saveptr;
     char *token;
 
     for (int i = 0; i < ARG_MAX; i++){
         if (i == 0) {
+            token = command_data->command;
+        }
+
+        else if (i == 1) {
             token = strtok_r(str_command_copy, " \0", &saveptr);
         }
+
         else {
             token = strtok_r(NULL, " \0", &saveptr);
         }
@@ -398,7 +486,7 @@ void shellUserInput(void) {
 //            (*usr_input)[bytes_read - 1] = '\0';
 //        }
 
-        strncpy(usr_input_str, usr_input[0], strlen(*usr_input) - 2);
+        strncpy(usr_input_str, usr_input[0], strlen(usr_input[0]) - 1);
 
         // Strip leading spaces
         while (usr_input_str[0] == ' '){
@@ -435,10 +523,8 @@ void shellUserInput(void) {
            parseCommand(usr_input_str, curr_command);
        }
 
-       // create argument vector.
-        if (curr_command->argumentList != NULL){
-            argumentVector(curr_command);
-        }
+
+       argumentVector(curr_command);
 
        //printf("command: %s\narguments: %s\ninput: %s\noutput: %s\nbackground %d\n",
 //              curr_command->command, curr_command->argumentList, curr_command->input_file, curr_command->output_file,
