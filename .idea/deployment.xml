@@ -1,26 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="PublishConfigData" serverName="OS1 (f09a26f5-6796-41ee-a6ab-654b422edb3f)" remoteFilesAllowedToDisappearOnAutoupload="false">
+  <component name="PublishConfigData" serverName="OSU_OS1" remoteFilesAllowedToDisappearOnAutoupload="false">
     <serverData>
-      <paths name="OS1 (f09a26f5-6796-41ee-a6ab-654b422edb3f)">
+      <paths name="OSU_OS1">
         <serverdata>
           <mappings>
-            <mapping deploy="/tmp/CS344_Assignment3" local="$PROJECT_DIR$" />
+            <mapping deploy="CS344" local="$PROJECT_DIR$" web="/" />
           </mappings>
-          <excludedPaths>
-            <excludedPath local="true" path="/nfs/stk/users/norwooma/CS344_Project3" />
-            <excludedPath local="true" path="/nfs/stak/users/norwooma/CS344_Project3/cmake-build-debug" />
-            <excludedPath local="true" path="/nfs/stak/users/norwooma/CS344_Project3" />
-            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug" />
-            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug-os1" />
-            <excludedPath local="true" path="/nfs/stk/usrs/norwooma/CS344_Project3/cmake-build-debug" />
-            <excludedPath local="true" path="$PROJECT_DIR$/~/CS344_Project3/cmake-build-debug" />
-            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-release" />
-            <excludedPath local="true" path="/nfs/stk/usrs/norwooma/CS344_Project3" />
-            <excludedPath local="true" path="$PROJECT_DIR$/~/CS344_Project3" />
-            <excludedPath local="true" path="/nfs/stk/users/norwooma/CS344_Project3/cmake-build-debug" />
-            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-release-os1" />
-          </excludedPaths>
+        </serverdata>
+      </paths>
+      <paths name="OSU_OS1 (c8ac3828-39e2-4a7d-97c3-756c72cb9790)">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/tmp/Assignment3" local="$PROJECT_DIR$" />
+          </mappings>
         </serverdata>
       </paths>
     </serverData>
