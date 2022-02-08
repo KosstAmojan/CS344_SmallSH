@@ -1,19 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="PublishConfigData" serverName="OSU_OS1" remoteFilesAllowedToDisappearOnAutoupload="false">
+  <component name="PublishConfigData" serverName="Remote Development" remoteFilesAllowedToDisappearOnAutoupload="false">
     <serverData>
-      <paths name="OSU_OS1">
+      <paths name="os1.engr.oregonstate.edu (f09a26f5-6796-41ee-a6ab-654b422edb3f)">
         <serverdata>
           <mappings>
-            <mapping deploy="CS344" local="$PROJECT_DIR$" web="/" />
+            <mapping deploy="/tmp/CS344_Assignment3" local="$PROJECT_DIR$" />
           </mappings>
-        </serverdata>
-      </paths>
-      <paths name="OSU_OS1 (c8ac3828-39e2-4a7d-97c3-756c72cb9790)">
-        <serverdata>
-          <mappings>
-            <mapping deploy="/tmp/Assignment3" local="$PROJECT_DIR$" />
-          </mappings>
+          <excludedPaths>
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug" />
+          </excludedPaths>
         </serverdata>
       </paths>
     </serverData>

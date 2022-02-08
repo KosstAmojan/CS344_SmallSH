@@ -21,6 +21,7 @@
 #include <signal.h>
 #include <sys/wait.h>
 #include <errno.h>
+#include "main.h"
 
 // Macro definitions here //
 #define MAX_LINE 2047
@@ -34,6 +35,7 @@ extern char *strtok_r(char *, const char *, char **);
 // File scope variables for signal handlers
 volatile sig_atomic_t interrupt_sig = 0;
 volatile sig_atomic_t tempstop_sig = 0;
+
 
 // Struct definitions here //
 struct command_data {
@@ -203,99 +205,89 @@ int input_output_redirect(struct command_data *curr_command, const char *input_o
     return 0;
 }
 
-void processUserInput(struct command_data *curr_command, struct process_status *last_p_status){
+int processUserInput(struct command_data *curr_command, struct process_status *last_p_status) {
 
     pid_t parentProc = getpid();
 
-    if (strcmp(curr_command->command,"exit") == 0){
+    if (strcmp(curr_command->command, "exit") == 0) {
         killAll();
-        return;
-    }
-
-    else if (strcmp(curr_command->command,"cd") == 0){
+        return -1;
+    } else if (strcmp(curr_command->command, "cd") == 0) {
         if (changeDirectory(curr_command) == 0) {
-            return;
-        }
-        else {
+            return 0;
+        } else {
             printf("%s: no such file or directory.\n", curr_command->argumentVector[0]);
-            fflush(stdout);
+            printf("Thread %d: updating last_p_status at line no %d\n", getpid(), __LINE__);
             last_p_status->lastExitStatus = EXIT_FAILURE;
-            return;
+            fflush(stdout);
+            return 0;
         }
-    }
-    else if (strcmp(curr_command->command,"status") == 0){
+    } else if (strcmp(curr_command->command, "status") == 0) {
         status(last_p_status);
-        return;
-    }
+        return 0;
+    } else {
 
-    else {
         int childStatus;
         pid_t childPid = fork();
 
         if (childPid == -1) {
-//            perror("fork() failed!");
             exit(1);
         } else if (childPid == 0) {
+            // make child processes not executed by exec able to be signaled by SIGTERM
+            signal(SIGTERM, SIG_DFL);
 
-                // if we're in the child process and it's not a background process don't ignore SIGINT
-                if (curr_command->run_in_background == 0) {
-                    // reset to default signal handler.
-                    signal(SIGINT, SIG_DFL);
-                    if (interrupt_sig == 1) {
-                        exit(EXIT_FAILURE);
-                    }
-                }
-
-                // print message as child process begins.
-                if (curr_command->run_in_background == 1) {
-                    printf("background pid is %d\n", getpid());
-                    printf("\n");
-                    fflush(stdout);
-                    kill(parentProc, SIGCONT);
-                }
-
-                if (input_output_redirect(curr_command, "input", last_p_status) == 1) {
-                    last_p_status->lastExitStatus = EXIT_FAILURE;
+            // if we're in the child process and it's not a background process don't ignore SIGINT
+            if (curr_command->run_in_background == 0) {
+                // reset to default signal handler.
+                signal(SIGINT, SIG_DFL);
+                if (interrupt_sig == 1) {
                     exit(EXIT_FAILURE);
                 }
-                if (input_output_redirect(curr_command, "output", last_p_status) == 1) {
-                    last_p_status->lastExitStatus = EXIT_FAILURE;
-                    exit(EXIT_FAILURE);
-                }
-                //            printf("The child process is running %s\n", curr_command->command);
-                //            fflush(stdout);
-                if (execvp(curr_command->command, curr_command->argumentVector) == -1) {
-                    last_p_status->lastExitStatus = EXIT_FAILURE;
-                    printf("%s: no such file or directory.\n", curr_command->argumentVector[0]);
-                    printf("\n");
-                    fflush(stdout);
-                    exit(EXIT_FAILURE);
-                }
+            }
+
+            // print message as child process begins.
+            if (curr_command->run_in_background == 1) {
+                printf("background pid is %d\n", getpid());
                 printf("\n");
-                return;
-        } else {  // foreground so wait for the child process
+                fflush(stdout);
+                kill(parentProc, SIGCONT);
+            }
+
+            if (input_output_redirect(curr_command, "input", last_p_status) == 1) {
+                exit(EXIT_FAILURE);
+            }
+            if (input_output_redirect(curr_command, "output", last_p_status) == 1) {
+                exit(EXIT_FAILURE);
+            }
+
+            if (execvp(curr_command->command, curr_command->argumentVector) == -1) {
+                printf("%s: no such file or directory.\n", curr_command->argumentVector[0]);
+                printf("\n");
+                fflush(stdout);
+                exit(EXIT_FAILURE);
+            }
+            printf("\n");
+            exit(0);
+        } else {// foreground so wait for the child process
             if (curr_command->run_in_background == 0) {
                 childPid = waitpid(childPid, &childStatus, 0);
                 if (WIFEXITED(childStatus)) {
-                    //printf("Child %d exited normally with status %d\n", childPid, WEXITSTATUS(childStatus));
-//                    if (curr_command->output_file != NULL || curr_command->input_file != NULL) {
-//                        printf("\n");
-//                        fflush(stdout);
-//                    }
+                    // normal exit
                     if (curr_command->input_file != NULL || curr_command->output_file != NULL) {
                         printf("\n");
                     }
-                    last_p_status->lastExitStatus = WEXITSTATUS(childStatus);
+                    if (WEXITSTATUS(childStatus)) {
+                        last_p_status->lastExitStatus = EXIT_FAILURE;
+                    }
                 } else {
+                    // abnormal exit
                     if (curr_command->input_file != NULL || curr_command->output_file != NULL) {
                         printf("\n");
                     }
-                    printf("terminated by signal %d\n", childPid, WTERMSIG(childStatus));
+                    printf("terminated by signal %d\n", SIGINT);
                     fflush(stdout);
-                    last_p_status->lastExitStatus = WTERMSIG(childStatus);
                 }
-            }
-                // don't wait for the child process
+            } // don't wait for the child process
             else {
                 // increment process count.
                 last_p_status->childCount++;
@@ -317,20 +309,21 @@ void processUserInput(struct command_data *curr_command, struct process_status *
                         }
                     }
                     if (WIFEXITED(childStatus)) {
-                        printf("background pid %d is done: exit value %d\n", childPid, WEXITSTATUS(childStatus));
-                        fflush(stdout);
-                        last_p_status->lastExitStatus = WEXITSTATUS(childStatus);
-                    } else {
-                        printf("background pid %d is done: terminated by signal %d\n", childPid, WTERMSIG(childStatus));
-                        fflush(stdout);
-                        last_p_status->lastExitStatus = WTERMSIG(childStatus);
+                        if (WEXITSTATUS(childStatus)) {
+                            printf("background pid %d is done: exit value %d\n", childPid, WEXITSTATUS(childStatus));
+                            last_p_status->lastExitStatus = EXIT_FAILURE;
+                            fflush(stdout);
+                        } else {
+                            printf("background pid %d is done: terminated by signal %d\n", childPid, WTERMSIG(childStatus));
+                            fflush(stdout);
+                        }
                     }
+                    pause();
                 }
-                pause();
             }
-            return;
         }
     }
+    return 0;
 }
 
 void pidExpand(char* inputString, size_t pidDigitCnt, const char *pidString){
@@ -437,45 +430,41 @@ void parseCommand2(char *usr_input, struct command_data *command_data) {
     }
 }
 
-_Noreturn void shellUserInput(void) {
+void shellUserInput(void) {
     // This function, called by main.c, handles basic user input/option selection. It then calls the appropriate
     // helper functions as necessary to complete file selection and processing for the user.
+    // struct that tracks most recent process status/term signal.
+    struct process_status *last_p_status = malloc(sizeof(struct process_status));
+    last_p_status->lastExitStatus = 0;
+    last_p_status->lastTermSig = 0;
+    last_p_status->childCount = 0;
+    for (int i = 0; i < 200; i++){
+        last_p_status->unfinishedProcessArray[i] = 0;
+    }
 
-    while (1) {
+    // Borrowing signal struct code from lecture materials.
+    struct sigaction ignore_action = {{0}};
+    struct sigaction continue_action = {{0}};
 
-        // struct that tracks most recent process status/term signal.
-        struct process_status *last_p_status = malloc(sizeof(struct process_status));
-        last_p_status->lastExitStatus = 0;
-        last_p_status->lastTermSig = 0;
-        last_p_status->childCount = 0;
-        for (int i = 0; i < 200; i++){
-            last_p_status->unfinishedProcessArray[i] = 0;
-        }
+    // , tempstop_action = {0};
+    sigset_t sigset;
 
-        // Borrowing signal struct code from lecture materials.
-        struct sigaction ignore_action = {{0}};
-        struct sigaction continue_action = {{0}};
-
-        // , tempstop_action = {0};
-        sigset_t sigset;
-
-        // The ignore_action struct has SIG_IGN as its signal handler
-        ignore_action.sa_handler = SIG_IGN;
-        continue_action.sa_handler = handle_SIGCONT;
+    // The ignore_action struct has SIG_IGN as its signal handler
+    ignore_action.sa_handler = SIG_IGN;
+    continue_action.sa_handler = handle_SIGCONT;
 
 //     Register the ignore_action as the handler for SIGTERM this signal will be ignored.
-        sigaction(SIGINT, &ignore_action, NULL);
-        sigaction(SIGTERM, &ignore_action, NULL);
-        sigaction(SIGCONT, &continue_action, NULL);
+    sigaction(SIGINT, &ignore_action, NULL);
+    sigaction(SIGTERM, &ignore_action, NULL);
+    sigaction(SIGCONT, &continue_action, NULL);
 
-        // register SIGINT & SIGTSTP to be ignored initially.
-//    sigaction(SIGTSTP, &ignore_action, NULL);
+    sigemptyset(&sigset);
+    sigaddset(&sigset, SIGCONT);
+    sigaddset(&sigset, SIGTERM);
 
-//    sigemptyset(&sigset);
-        sigaddset(&sigset, SIGCONT);
-//    sigaddset(&sigset, SIGINT);
-//    sigaddset(&sigset, SIGTSTP);
-        sigprocmask(SIGCONT, &sigset, NULL);
+    sigprocmask(SIGCONT, &sigset, NULL);
+
+    while (1) {
 
         char **usr_input = calloc(MAX_LINE,  sizeof(char));
         char *usr_input_str = calloc(MAX_LINE,  sizeof(char));
@@ -491,6 +480,7 @@ _Noreturn void shellUserInput(void) {
         curr_command->run_in_background = 0;
         char *pidString = NULL;
         int n = 0, childStatus;
+        int retval;
         size_t max_line1 = MAX_LINE, *max_line = &max_line1, bytes_read = 0, alloc_mem = sizeof(char) * MAX_LINE,
                             pidDigitCnt = 0;
         pid_t shell_process_id = getpid(), childPid = 0;
@@ -508,16 +498,14 @@ _Noreturn void shellUserInput(void) {
                     if (WIFEXITED(childStatus)) {
                         printf("background pid %d is done: exit value %d\n", childPid, WEXITSTATUS(childStatus));
                         fflush(stdout);
-                        last_p_status->lastExitStatus = WEXITSTATUS(childStatus);
                     } else {
                         printf("background pid %d is done: terminated by signal %d\n", childPid, WTERMSIG(childStatus));
                         fflush(stdout);
-                        last_p_status->lastExitStatus = WTERMSIG(childStatus);
+                        last_p_status->lastExitStatus = EXIT_FAILURE;
                     }
                 }
             }
         }
-//        fflush(stdin);
 
         // Clear stdin before and after each read from it.
 
@@ -527,26 +515,25 @@ _Noreturn void shellUserInput(void) {
 
             if ((bytes_read = getline(usr_input, max_line, stdin)) <= 0) {
 //            perror("Error reading from getline");
-                fflush(stdin);
                 fflush(stdout);
                 continue;
             }
 
             if (usr_input[0][0] == '#' || usr_input[0][0] == '\n') {
-                fflush(stdin);
                 fflush(stdout);
                 if (usr_input[0][0] == '#') {
                     printf("\n");
                 }
                 continue;
             }
-            fflush(stdin);
             fflush(stdout);
             break;
         }
 
-        strncpy(usr_input_str, usr_input[0], strlen(usr_input[0]) - 1);
-//        fflush(stdin);
+        strcpy(usr_input_str, usr_input[0]);
+        if (usr_input_str[strlen(usr_input_str)-1] == '\n'){
+            usr_input_str[strlen(usr_input_str)-1] = '\0';
+        }
         // Strip leading spaces
         while (usr_input_str[0] == ' '){
             usr_input_str++;
@@ -573,10 +560,10 @@ _Noreturn void shellUserInput(void) {
 
        // parse input into command struct.
        if (strlen(usr_input_str) > 0){
-           parseCommand2(usr_input_str, curr_command);
+         parseCommand2(usr_input_str, curr_command);
        }
 
-       processUserInput(curr_command, last_p_status);
+        retval = processUserInput(curr_command, last_p_status);
 
         if (curr_command->command != NULL){
             free((void *)curr_command->command);
@@ -600,7 +587,11 @@ _Noreturn void shellUserInput(void) {
 
         free(*usr_input);
         free(usr_input_str);
-        free(last_p_status);
+
+        if (retval == -1){
+            free(last_p_status);
+            return;
+        }
     }
 }
 
